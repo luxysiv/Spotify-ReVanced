@@ -1,0 +1,105 @@
+name: Build and Release Spotify ReVanced
+
+on:
+  push:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * *'
+
+permissions: write-all
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@main
+      with:
+        fetch-depth: 0
+
+    - name: Cache Data
+      id: cache-cloudflare
+      uses: actions/cache@main
+      with:
+        path: patched_versions.txt
+        key: ${{ runner.os }}-patched-versions-${{ github.run_id }}
+        restore-keys: |
+          ${{ runner.os }}-patched-versions-
+
+    - name: Run patching script
+      run: |
+        chmod +x ./spotify.sh
+        ./spotify.sh
+
+    - name: Check for APK file
+      id: check-apk
+      run: |
+        if ls Spotify-ReVanced-*.apk 1> /dev/null 2>&1; then
+          echo "apk_exists=true" >> $GITHUB_OUTPUT
+        else
+          echo "apk_exists=false" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Get current date
+      if: steps.check-apk.outputs.apk_exists == 'true'
+      id: date
+      run: |
+        echo "TAG_DATE=$(date +'%Y.%m.%d')" >> $GITHUB_ENV
+        echo "BUILD_DATE=$(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_ENV
+
+    - name: Create Release
+      if: steps.check-apk.outputs.apk_exists == 'true'
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: "spotify-revanced-v${{ env.TAG_DATE }}"
+        name: "Spotify ReVanced ${{ env.TAG_DATE }}"
+        body: |
+          🎵 Spotify ReVanced - Built automatically
+          - **Version:** ${{ env.LATEST_VERSION }}
+          - **Build date:** ${{ env.BUILD_DATE }}
+          - **Includes:** ReVanced patches
+        files: |
+          Spotify-ReVanced-*.apk
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Send APK to Telegram
+      if: steps.check-apk.outputs.apk_exists == 'true'
+      run: |
+        BOT_TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
+        CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
+        FILE_PATH=$(ls Spotify-ReVanced-*.apk | head -n 1)
+        VERSION=$(echo "$FILE_PATH" | grep -oP '\d+\.\d+\.\d+')
+        
+        if [[ -z "$BOT_TOKEN" || -z "$CHAT_ID" ]]; then
+          echo "Telegram bot token or chat ID not set. Skipping upload."
+          exit 0
+        fi
+
+        echo "Uploading $FILE_PATH to Telegram..."
+        
+        curl -F chat_id="$CHAT_ID" \
+             -F document=@"$FILE_PATH" \
+             -F caption="📢 *Spotify ReVanced v$VERSION*
+        🚀 Built automatically on $(date -u +'%Y-%m-%d %H:%M:%S UTC')" \
+             -H "Content-Type: multipart/form-data" \
+             "https://api.telegram.org/bot$BOT_TOKEN/sendDocument"
+
+    - name: Delete older releases
+      if: steps.check-apk.outputs.apk_exists == 'true'
+      uses: dev-drprasad/delete-older-releases@v0.2.1
+      with:
+        keep_latest: 1
+        delete_tags: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          
+    - name: Delete workflow runs
+      if: steps.check-apk.outputs.apk_exists == 'true'
+      uses: Mattraks/delete-workflow-runs@v2
+      with:
+        token: ${{ github.token }}
+        repository: ${{ github.repository }}
+        retain_days: 0
+        keep_minimum_runs: 1

@@ -70,7 +70,7 @@ jobs:
         BOT_TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
         CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
         FILE_PATH=$(ls Spotify-ReVanced-*.apk | head -n 1)
-        VERSION=$(echo "$FILE_PATH" | grep -oP '\d+\.\d+\.\d+')
+        VERSION=$(echo "$FILE_PATH" | grep -oP '\d+\.\d+\.\d+\.\d+')
         
         if [[ -z "$BOT_TOKEN" || -z "$CHAT_ID" ]]; then
           echo "Telegram bot token or chat ID not set. Skipping upload."

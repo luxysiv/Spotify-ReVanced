@@ -226,7 +226,7 @@ main() {
         java -jar revanced-cli*.jar patch --patches patches*.rvp --out "patched-spotify-v$version.apk" "$APKs_FILE" || exit 1
 
         # Sign
-        local SIGNED_APK="signed-patched-spotify-v$version.apk"
+        local SIGNED_APK="Spotify-ReVanced-v$version.apk"
         "$APKSIGNER" sign --ks public.jks --ks-key-alias public \
             --ks-pass pass:public --key-pass pass:public --out "$SIGNED_APK" "patched-spotify-v$version.apk"
 

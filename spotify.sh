@@ -151,6 +151,68 @@ download_apk_from_apkpure() {
     exit 1
 }
 
+get_uptodown_latest_version() {
+    local name="spotify"
+    local url="https://$name.en.uptodown.com/android/versions"
+
+    local version
+    version=$(req "$url" - | grep -oP 'class="version">\K[^<]+' | get_latest_version)
+    
+    if [[ -z "$version" ]]; then
+        echo "[!] Error: Could not find a valid version!" >&2
+        exit 1
+    fi
+
+    echo "$version"
+}
+
+download_apk_from_uptodown() {
+    local version=$1
+    local name="spotify"
+    local url="https://$name.en.uptodown.com/android/versions"
+
+    local download_url
+    download_url="$(req "$url" - | grep -B3 '"version">'$version'<' \
+                                 | sed -n 's/.*data-url="\([^"]*\)".*/\1/p' \
+                                 | sed -n '1p')-x"
+    if [[ -z "$download_url" ]]; then
+        echo "[!] Error: Could not get download url!" >&2
+        exit 1
+    fi
+
+    local download_link
+    download_link="https://dw.uptodown.com/dwn/$(req "$download_url" - | grep 'id="detail-download-button"' -A2 \
+                                                                       | sed -n 's/.*data-url="\([^"]*\)".*/\1/p' \
+                                                                       | sed -n '1p')"
+    if [[ -z "$download_link" ]]; then
+        echo "[!] Error: Could not get download link!" >&2
+        exit 1
+    fi
+
+    # Get file list before download
+    local before_download
+    before_download=(*)
+
+    # Download file to current directory
+    req "$download_link"
+
+    # Get file list after download
+    local after_download
+    after_download=(*)
+
+    # Find new file
+    local file
+    for file in "${after_download[@]}"; do
+        if [[ ! " ${before_download[*]} " =~ " $file " ]]; then
+            echo "$file"
+            return
+        fi
+    done
+
+    echo "[!] Error: Could not determine downloaded file name!" >&2
+    exit 1
+}
+
 main() {
     # Get latest version
     local version

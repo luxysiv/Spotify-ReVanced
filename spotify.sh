@@ -272,6 +272,15 @@ main() {
             exit 1
         fi
 
+        # Remove other architectures
+        echo "[*] Filtering architectures in merged APK..."
+        zip -d "$merged_apk" \
+            "lib/armeabi-v7a/*" \
+            "lib/x86/*" \
+            "lib/x86_64/*" \
+            "lib/armeabi/*" \
+            >/dev/null || echo "[!] Skipping missing architectures."
+
         # Patch merged APK
         java -jar revanced-cli*.jar patch --patches patches*.rvp --out "patched-spotify-v$version.apk" "$merged_apk" || exit 1
 
@@ -282,8 +291,18 @@ main() {
 
         echo "[✔] Signed APK: $SIGNED_APK"
     else
-        echo "[*] File is APK, patching and signing..."
-        
+        echo "[*] File is APK, filtering architectures..."
+
+        # Remove other architectures
+        zip -d "$APKs_FILE" \
+            "lib/armeabi-v7a/*" \
+            "lib/x86/*" \
+            "lib/x86_64/*" \
+            "lib/armeabi/*" \
+            >/dev/null || echo "[!] Skipping missing architectures."
+
+        echo "[*] Patching and signing..."
+
         # Patch APK
         java -jar revanced-cli*.jar patch --patches patches*.rvp --out "patched-spotify-v$version.apk" "$APKs_FILE" || exit 1
 

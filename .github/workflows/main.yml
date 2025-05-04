@@ -71,27 +71,30 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Send release link to Telegram
+    - name: Send direct APK download link to Telegram
       if: steps.check-apk.outputs.apk_exists == 'true'
       run: |
         BOT_TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}"
         CHAT_ID="${{ secrets.TELEGRAM_CHAT_ID }}"
         VERSION="${{ env.LATEST_VERSION }}"
         BUILD_DATE="${{ env.BUILD_DATE }}"
-        REPO_URL="https://github.com/${{ github.repository }}"
-        RELEASE_URL="$REPO_URL/releases/tag/spotify-revanced-v$VERSION"
+        REPO="${{ github.repository }}"
+        FILE_NAME=$(ls Spotify-ReVanced-*.apk | head -n 1)
+        DOWNLOAD_URL="https://github.com/$REPO/releases/download/spotify-revanced-v$VERSION/$FILE_NAME"
 
         if [[ -z "$BOT_TOKEN" || -z "$CHAT_ID" ]]; then
           echo "Telegram bot token or chat ID not set. Skipping message."
           exit 0
         fi
 
-        echo "Sending release link to Telegram..."
+        echo "Sending direct APK download link to Telegram..."
 
         curl -s -X POST "https://api.telegram.org/bot$BOT_TOKEN/sendMessage" \
           -d chat_id="$CHAT_ID" \
           -d parse_mode="Markdown" \
-          -d text="📢 *Spotify ReVanced v$VERSION*\n🚀 Built automatically on $BUILD_DATE\n🔗 [Download from GitHub Releases]($RELEASE_URL)"
+          -d text="📢 *Spotify ReVanced v$VERSION*
+        🚀 Built on $BUILD_DATE 
+        ⬇️ [Download APK]($DOWNLOAD_URL)"
 
     - name: Delete older releases
       if: steps.check-apk.outputs.apk_exists == 'true'

@@ -56,11 +56,6 @@ download_github() {
     local page
     page=$(req "$github_api_url" - 2>/dev/null)
     
-    if ! command -v jq &> /dev/null; then
-        echo "Error: jq is required but not installed. Please install jq first." >&2
-        exit 1
-    fi
-    
     local asset_urls
     asset_urls=$(echo "$page" | jq -r '.assets[] | select(.name | endswith(".asc") | not) | "\(.browser_download_url) \(.name)"')
     
@@ -104,12 +99,6 @@ get_apkpure_latest_version() {
 
     local version
     version=$(req "$url" - | grep -oP 'data-dt-version="\K[^"]*' | sed 10q | get_latest_version)
-    
-    if [[ -z "$version" ]]; then
-        echo "[!] Error: Could not find a valid version!" >&2
-        exit 1
-    fi
-
     echo "$version"
 }
 
@@ -121,11 +110,6 @@ download_apk_from_apkpure() {
 
     local download_link
     download_link=$(req "$url" - | grep -oP '<a[^>]*id="download_link"[^>]*href="\K[^"]*' | head -n 1)
-
-    if [[ -z "$download_link" ]]; then
-        echo "[!] Error: Could not get download link!" >&2
-        exit 1
-    fi
 
     # Get file list before download
     local before_download
@@ -157,11 +141,6 @@ get_uptodown_latest_version() {
 
     local version
     version=$(req "$url" - | grep -oP 'class="version">\K[^<]+' | get_latest_version)
-    
-    if [[ -z "$version" ]]; then
-        echo "[!] Error: Could not find a valid version!" >&2
-        exit 1
-    fi
 
     echo "$version"
 }
@@ -175,19 +154,11 @@ download_apk_from_uptodown() {
     download_url="$(req "$url" - | grep -B3 '"version">'$version'<' \
                                  | sed -n 's/.*data-url="\([^"]*\)".*/\1/p' \
                                  | sed -n '1p')-x"
-    if [[ -z "$download_url" ]]; then
-        echo "[!] Error: Could not get download url!" >&2
-        exit 1
-    fi
-
+    
     local download_link
     download_link="https://dw.uptodown.com/dwn/$(req "$download_url" - | grep 'id="detail-download-button"' -A2 \
                                                                        | sed -n 's/.*data-url="\([^"]*\)".*/\1/p' \
                                                                        | sed -n '1p')"
-    if [[ -z "$download_link" ]]; then
-        echo "[!] Error: Could not get download link!" >&2
-        exit 1
-    fi
 
     # Get file list before download
     local before_download
@@ -232,89 +203,48 @@ main() {
     download_github "revanced" "revanced-cli"
 
     # Download APK
-    local APKs_FILE
-    APKs_FILE=$(download_apk_from_apkpure "$version")
-    echo "[*] Downloaded APK file: $APKs_FILE"
-
-    # Verify APK download
-    if [[ ! -f "$APKs_FILE" ]]; then
-        echo "[!] Error: Failed to download APK file!" >&2
-        exit 1
-    fi
+    local APK_FILE
+    APK_FILE=$(download_apk_from_apkpure "$version")
+    echo "[*] Downloaded APK file: $APK_FILE"
 
     # Find apksigner
     local APKSIGNER
-    if command -v apksigner &> /dev/null; then
-        APKSIGNER="apksigner"
-    else
-        APKSIGNER=$(find "${ANDROID_SDK_ROOT:-$HOME/Android/Sdk}/build-tools" -name apksigner -type f | sort -Vr | head -n 1)
-    fi
-
-    if [[ -z "$APKSIGNER" ]]; then
-        echo "[!] Error: Could not find 'apksigner'. Please install Android SDK Build-Tools!" >&2
-        exit 1
-    fi
+    APKSIGNER=$(find "${ANDROID_SDK_ROOT:-$HOME/Android/Sdk}/build-tools" -name apksigner -type f | sort -Vr | head -n 1)
 
     # Process based on file type
-    if [[ "$APKs_FILE" == *.xapk ]]; then
-        echo "[*] File is .xapk, merging files..."
+    if [[ "$APK_FILE" != *.apk ]]; then
+        echo "[*] File is not .apk, merging files..."
 
         download_github "REAndroid" "APKeditor"
 
+        MERGED_APK="${APK_FILE%.*}.apk"
+
         # Merge file
-        java -jar APKEditor*.jar m -i "$APKs_FILE" 2>/dev/null
+        java -jar APKEditor*.jar m -i "$APK_FILE" -o "$MERGED_APK" 2>/dev/null
 
-        # Find merged file
-        local merged_apk
-        merged_apk=$(ls *_merged.apk 2>/dev/null | head -n 1)
-        if [[ -z "$merged_apk" ]]; then
-            echo "[!] Error: Could not find merged APK file!" >&2
-            exit 1
-        fi
+        APK_FILE="$MERGED_APK"
 
-        # Remove other architectures
-        echo "[*] Filtering architectures in merged APK..."
-        zip -d "$merged_apk" \
-            "lib/armeabi-v7a/*" \
-            "lib/x86/*" \
-            "lib/x86_64/*" \
-            "lib/armeabi/*" \
-            >/dev/null || echo "[!] Skipping missing architectures."
-
-        # Patch merged APK
-        java -jar revanced-cli*.jar patch --patches patches*.rvp --out "patched-spotify-v$version.apk" "$merged_apk" || exit 1
-
-        # Sign
-        local SIGNED_APK="Spotify-ReVanced-v$version.apk"
-        "$APKSIGNER" sign --ks public.jks --ks-key-alias public \
-            --ks-pass pass:public --key-pass pass:public --out "$SIGNED_APK" "patched-spotify-v$version.apk"
-
-        echo "[✔] Signed APK: $SIGNED_APK"
-    else
-        echo "[*] File is APK, filtering architectures..."
-
-        # Remove other architectures
-        zip -d "$APKs_FILE" \
-            "lib/armeabi-v7a/*" \
-            "lib/x86/*" \
-            "lib/x86_64/*" \
-            "lib/armeabi/*" \
-            >/dev/null || echo "[!] Skipping missing architectures."
-
-        echo "[*] Patching and signing..."
-
-        # Patch APK
-        java -jar revanced-cli*.jar patch --patches patches*.rvp --out "patched-spotify-v$version.apk" "$APKs_FILE" || exit 1
-
-        # Sign
-        local SIGNED_APK="Spotify-ReVanced-v$version.apk"
-        "$APKSIGNER" sign --ks public.jks --ks-key-alias public \
-            --ks-pass pass:public --key-pass pass:public --out "$SIGNED_APK" "patched-spotify-v$version.apk"
-
-        echo "[✔] Signed APK: $SIGNED_APK"
     fi
+    
+    # Remove other architectures
+    zip -d "$APK_FILE" \
+        "lib/armeabi-v7a/*" \
+        "lib/x86/*" \
+        "lib/x86_64/*" \
+        >/dev/null || echo "[!] Skipping missing architectures."
 
-    # Save version to patched_text
+    echo "[*] Patching and signing..."
+
+    # Patch APK
+    java -jar revanced-cli*.jar patch --patches patches*.rvp --out "patched-spotify-v$version.apk" "$APK_FILE" -e "Change package name" || exit 1
+
+    # Sign
+    local SIGNED_APK="Spotify-ReVanced-v$version.apk"
+    "$APKSIGNER" sign --ks public.jks --ks-key-alias public \
+        --ks-pass pass:public --key-pass pass:public --out "$SIGNED_APK" "patched-spotify-v$version.apk"
+
+    echo "[✔] Signed APK: $SIGNED_APK"
+    
     save_version "$version"
 }
 

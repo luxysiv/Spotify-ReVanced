@@ -117,7 +117,8 @@ download_apk_from_uptodown() {
 }
 
 main() {
-    local version=$(get_apkpure_latest_version)
+    # local version=$(get_apkpure_latest_version)
+    version="9.0.44.478"
     echo "[*] Latest version found: $version"
 
     check_version "$version" && { echo "[*] Version $version was already patched - skipping build"; exit 0; }

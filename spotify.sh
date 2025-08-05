@@ -117,7 +117,7 @@ download_apk_from_uptodown() {
 }
 
 main() {
-    local version=$(get_apkpure_latest_version)
+    local version=$(get_uptodown_latest_version)
     echo "[*] Latest version found: $version"
 
     check_version "$version" && { echo "[*] Version $version was already patched - skipping build"; exit 0; }
@@ -127,7 +127,7 @@ main() {
     download_github "revanced" "revanced-patches"
     download_github "revanced" "revanced-cli"
 
-    local APK_FILE=$(download_apk_from_apkpure "$version")
+    local APK_FILE=$(download_apk_from_uptodown "$version")
     echo "[*] Downloaded APK file: $APK_FILE"
 
     local APKSIGNER=$(find "${ANDROID_SDK_ROOT:-$HOME/Android/Sdk}/build-tools" -name apksigner -type f | sort -Vr | head -n 1)
